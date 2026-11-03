@@ -367,6 +367,8 @@ static bool ExpandMacro() {
         int n = vCurrentWord(word, MAX_BUFF + 1);
         if (n <= 0) return false;
         shown = n;
+        // a digit at the start of a word is typed as is, not kept in the engine's word ("2fa" -> word "fa")
+        for (wchar_t c : _macroKeys) { if (c >= L'0' && c <= L'9') shown++; else break; }
     }
     batchBackspaces(shown);
     for (wchar_t c : expansion) {

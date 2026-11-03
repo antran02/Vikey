@@ -382,12 +382,15 @@ static void buildMain() {
     toggleRow(L"Nhớ theo ứng dụng", L"Vikey nhớ bạn dùng tiếng Anh hay tiếng Việt ở mỗi ứng dụng và tự chuyển lại khi bạn quay về ứng dụng đó.", C_SMART, prefs::getInt(L"UseSmartSwitchKey", 1) != 0);
     toggleRow(L"Nhớ theo trang web", L"Trong Chrome, Edge, Brave, Vivaldi, Opera, Firefox: nhớ tiếng Anh hay tiếng Việt cho từng trang web. Chỉ đọc địa chỉ tab đang mở, ngay trên máy bạn.", C_SITE, prefs::getInt(L"SmartSwitchPerSite", 1) != 0);
     endGroup();
-    beginGroup(L"Gõ tắt");
-    toggleRow(L"Bật gõ tắt", L"Gõ một viết tắt rồi dấu cách (hoặc dấu câu) để thay bằng cụm từ đầy đủ. Viết tắt 1–31 chữ/số, không phân biệt hoa thường; gõ toàn chữ hoa thì cụm từ cũng ra chữ hoa.", C_MACRO, macro::enabled());
-    HWND macroEdit = row(L"Danh sách gõ tắt", L"Mở macros.txt (trong thư mục dữ liệu của Vikey) để thêm, sửa hoặc xoá các viết tắt: mỗi dòng viết tắt=thay thế. Vikey đọc lại file ngay khi bạn lưu.", L"VikeyButton", C_MACROEDIT, 120, 26, WS_TABSTOP);
-    SetWindowTextW(macroEdit, L"Sửa danh sách…"); setBg(macroEdit, GROUP);
-    endGroup();
     beginGroup(L"Gõ tiếng Việt");
+    // Gõ tắt: one row keeps the window short enough for a 768 px screen
+    rowLabel(L"Gõ tắt", L"Gõ một viết tắt rồi dấu cách (hoặc dấu câu) để thay bằng cụm từ đầy đủ. Viết tắt 1–31 chữ/số, không phân biệt hoa thường; gõ toàn chữ hoa thì cụm từ cũng ra chữ hoa. Danh sách: macros.txt, mỗi dòng viết tắt=thay thế.");
+    HWND macroBtn = child(L"VikeyButton", L"Sửa danh sách…", WS_TABSTOP, W - MARGIN - 16 - 40 - 8 - 116, _y + (ROW - 26) / 2, 116, 26, C_MACROEDIT, fBody);
+    setBg(macroBtn, GROUP);
+    HWND macroTgl = child(L"VikeyToggle", L"", 0, W - MARGIN - 16 - 40, _y + (ROW - 23) / 2, 40, 23, C_MACRO, fBody);
+    setToggle(macroTgl, macro::enabled());
+    _ctl[C_MACRO] = macroTgl; _ctl[C_MACROEDIT] = macroBtn;
+    _y += ROW;
     HWND style = row(L"Kiểu gõ", L"Telex: [ ra ơ, ] ra ư, w ra ư. Telex đơn giản 1: [ ] là dấu ngoặc, w đứng riêng vẫn là w. Telex đơn giản 2: [ ] là dấu ngoặc, w vẫn ra ư. Cả ba kiểu đều gõ uw, ow, aw ra ư, ơ, ă.", L"COMBOBOX", C_STYLE, 150, 200, CBS_DROPDOWNLIST | WS_TABSTOP);
     for (const wchar_t* t : {L"Telex", L"Telex đơn giản 1", L"Telex đơn giản 2"}) SendMessageW(style, CB_ADDSTRING, 0, (LPARAM)t);
     SendMessageW(style, CB_SETCURSEL, std::min(2, std::max(0, prefs::getInt(L"TelexStyle", 0))), 0);
