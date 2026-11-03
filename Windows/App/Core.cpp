@@ -351,7 +351,8 @@ static void MacroKeyDown(Uint16 key, unsigned flags) {
     if (key == KEY_DELETE) { if (!_macroKeys.empty()) _macroKeys.pop_back(); return; }
     if (IsMacroBreakKey(key)) return;
     if (key == KEY_LEFT || key == KEY_RIGHT || key == KEY_UP || key == KEY_DOWN || key == KEY_ESC) { _macroKeys.clear(); return; }
-    wchar_t ch = (wchar_t)keyCodeToCharacter(key | ((flags & F_SHIFT) ? CAPS_MASK : 0));
+    bool upper = (flags & F_SHIFT) || ((flags & F_CAPS) && IsLetterKey(key));   // Caps Lock shifts letters only ("1" stays "1")
+    wchar_t ch = (wchar_t)keyCodeToCharacter(key | (upper ? CAPS_MASK : 0));
     if (ch && std::iswalnum(ch)) { if (_macroKeys.size() < 31) _macroKeys += ch; else _macroKeys.clear(); }
     else _macroKeys.clear();
 }
