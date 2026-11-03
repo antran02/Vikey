@@ -624,6 +624,17 @@ Uint32 getCharacterCode(const Uint32& data) {
     return 0;
 }
 
+int vCurrentWord(wchar_t* out, int max) {
+    if (!out || max <= 0) return 0;
+    int n = 0;
+    for (int i = 0; i < _index && n < max; i++) {
+        Uint32 c = getCharacterCode(TypingWord[i]);
+        wchar_t ch = (c & CHAR_CODE_MASK) ? (wchar_t)(c & 0xFFFF) : (wchar_t)keyCodeToCharacter(c);
+        if (ch) out[n++] = ch;
+    }
+    return n;
+}
+
 void findAndCalculateVowel(const bool& forGrammar) {
     vowelCount = 0;
     VSI = VEI = 0;

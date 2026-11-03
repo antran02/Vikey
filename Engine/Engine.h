@@ -208,6 +208,13 @@ void vKeyHandleEvent(const vKeyEvent& event,
                      const bool& otherControlKey=false);
 
 /**
+ * The current word as it is on screen (Telex marks applied), for the platform layer
+ * (macros delete it before typing the expansion). Writes at most max characters and
+ * returns how many were written.
+ */
+int vCurrentWord(wchar_t* out, int max);
+
+/**
  * Start a new word
  */
 void startNewSession();

@@ -2,6 +2,7 @@
 #include "Site.h"
 #include "KeyMap.h"
 #include "Prefs.h"
+#include "Macro.h"
 #include "Engine.h"
 #include <psapi.h>
 #include <mmsystem.h>
@@ -9,6 +10,7 @@
 #include <vector>
 #include <string>
 #include <algorithm>
+#include <cwctype>
 #include <cstdio>
 #include <ctime>
 #include <mutex>
@@ -61,6 +63,8 @@ static std::wstring _siteHost;                    // host of the browser tab in 
 static bool _otherInputLanguage = false;          // Japanese/Chinese IME layout active
 static int _languageTemp = 0;
 static std::vector<Byte> savedSmartSwitchKeyData;
+// alphanumeric keys typed since the last word break: the macro trigger, as typed
+static std::wstring _macroKeys;
 
 // ---- Auto switch by typing (same state machine as VikeyCore.mm) --------------------------
 static Uint32 _enKeys[MAX_BUFF];
@@ -233,6 +237,7 @@ static void ApplySmartSwitch() {
 void onForegroundChanged() {
     queryFrontMostApp();
     _siteHost.clear();
+    _macroKeys.clear();
     ResetEnglishWord(true); _autoFixUndo.active = false;
     TLEndWord("app"); _tlApp = _frontApp;
     if (vUseSmartSwitchKey) ApplySmartSwitch();
@@ -241,6 +246,7 @@ void onForegroundChanged() {
 void onSiteChanged(const std::wstring& host) {
     if (host == _siteHost) return;
     _siteHost = host;
+    _macroKeys.clear();
     ResetEnglishWord(true); _autoFixUndo.active = false;
     if (vUseSmartSwitchKey) ApplySmartSwitch();
     startNewSession();
@@ -332,6 +338,56 @@ static void SendEngineOutput() {
     flushBatch();
 }
 
+// ---- Gõ tắt / macros (Macro.cpp) -----------------------------------------------------------
+/// Keys that finish a word: the macro expands before the key itself is typed.
+static bool IsMacroBreakKey(Uint16 key) {
+    return key == KEY_SPACE || key == KEY_RETURN || key == KEY_ENTER || key == KEY_TAB ||
+           key == KEY_COMMA || key == KEY_DOT || key == KEY_SEMICOLON || key == KEY_SLASH ||
+           key == KEY_BACK_SLASH || key == KEY_MINUS || key == KEY_EQUALS || key == KEY_QUOTE ||
+           key == KEY_BACKQUOTE;   // not [ ]: Telex types ơ ư with them
+}
+static void MacroKeyDown(Uint16 key, unsigned flags) {
+    if (flags & (F_CONTROL | F_ALT | F_WIN)) { _macroKeys.clear(); return; }
+    if (key == KEY_DELETE) { if (!_macroKeys.empty()) _macroKeys.pop_back(); return; }
+    if (IsMacroBreakKey(key)) return;
+    if (key == KEY_LEFT || key == KEY_RIGHT || key == KEY_UP || key == KEY_DOWN || key == KEY_ESC) { _macroKeys.clear(); return; }
+    wchar_t ch = (wchar_t)keyCodeToCharacter(key | ((flags & F_SHIFT) ? CAPS_MASK : 0));
+    if (ch && std::iswalnum(ch)) { if (_macroKeys.size() < 31) _macroKeys += ch; else _macroKeys.clear(); }
+    else _macroKeys.clear();
+}
+/// Replaces the trigger just typed with its expansion, then types the break key that ended the word.
+static bool ExpandMacro() {
+    if (!macro::enabled() || _macroKeys.empty()) return false;
+    std::wstring expansion;
+    if (!macro::find(macro::entries(), _macroKeys, expansion)) return false;
+
+    int shown = (int)_macroKeys.size();
+    if (vLanguage == 1) {   // Telex may have put fewer characters on screen than keys typed ("vieejt" -> "việt")
+        wchar_t word[MAX_BUFF + 1];
+        int n = vCurrentWord(word, MAX_BUFF + 1);
+        if (n <= 0) return false;
+        shown = n;
+    }
+    batchBackspaces(shown);
+    for (wchar_t c : expansion) {
+        if (c == L'\n') batchKey(VK_RETURN);
+        else if (c == L'\t') batchKey(VK_TAB);
+        else batchText(&c, 1);
+    }
+    if (_keyVk) batchKey((WORD)_keyVk, _keyExtended);   // modifiers are still held: Shift+; still types ':'
+    flushBatch();
+
+    vAutoSwitchRequest = -1;
+    startNewSession();
+    ResetEnglishWord(true);
+    _autoFixUndo.active = false;
+    _macroKeys.clear();
+    TLEndWord("macro");
+    TLCount("macro");
+    TLWrite("\"e\":\"macro\"");
+    return true;
+}
+
 // ---- Hotkey ------------------------------------------------------------------------------
 static bool checkHotKey(int hotKeyData, bool checkKeyCode = true) {
     if ((hotKeyData & (~0x8000)) == EMPTY_HOTKEY) return false;
@@ -345,6 +401,7 @@ static bool checkHotKey(int hotKeyData, bool checkKeyCode = true) {
 static void switchLanguage(const char* via) {
     PauseAutoSwitchAfterManual();
     _autoFixUndo.active = false;
+    _macroKeys.clear();
     ResetEnglishWord(true);
     vLanguage = vLanguage == 0 ? 1 : 0;
     TLManual(via, vLanguage);
@@ -354,11 +411,11 @@ static void switchLanguage(const char* via) {
 }
 void setLanguageByUser(int lang) {
     if (vLanguage == lang) return;
-    PauseAutoSwitchAfterManual(); _autoFixUndo.active = false; ResetEnglishWord(true);
+    PauseAutoSwitchAfterManual(); _autoFixUndo.active = false; _macroKeys.clear(); ResetEnglishWord(true);
     vLanguage = lang; TLManual("menu", vLanguage); VKLanguageChanged(true); startNewSession();
 }
 void setLanguageQuiet(int lang) {
-    _autoFixUndo.active = false; ResetEnglishWord(true); _autoPauseUntil = 0; vAutoSwitchByTyping = prefs::getInt(L"AutoSwitchByTyping", 1);
+    _autoFixUndo.active = false; _macroKeys.clear(); ResetEnglishWord(true); _autoPauseUntil = 0; vAutoSwitchByTyping = prefs::getInt(L"AutoSwitchByTyping", 1);
     vLanguage = lang ? 1 : 0; VKLanguageChanged(false); startNewSession();
 }
 int language() { return vLanguage; }
@@ -368,7 +425,7 @@ void setLanguageObserver(std::function<void(int)> f) { _observer = f; }
 static std::function<void()> _emojiHandler;
 void setEmojiHotkeyHandler(std::function<void()> f) { _emojiHandler = f; }
 void setEmojiPickerOpen(bool open, HWND picker) { vEmojiWindow = picker; vEmojiOpen = open; }
-void resetTyping() { ResetEnglishWord(true); _autoFixUndo.active = false; startNewSession(); }
+void resetTyping() { _macroKeys.clear(); ResetEnglishWord(true); _autoFixUndo.active = false; startNewSession(); }
 void insertText(const std::wstring& text) {
     resetTyping();
     batchText(text.c_str(), (int)text.size());   // KEYEVENTF_UNICODE per UTF-16 unit: surrogate pairs arrive as one character
@@ -409,6 +466,7 @@ static bool UndoAutoFixWithBackspace() {
     if (vLanguage != _autoFixUndo.language) { vLanguage = _autoFixUndo.language; VKLanguageChanged(true); }
     startNewSession();
     ResetEnglishWord(false);   // the cursor is at the end of a word we didn't see typed
+    _macroKeys.clear();
     // back in English with the typed keys on screen: they are the current word again, so typing on
     // ("vaay" + "j") is checked as a whole ("vaayj" -> "vậy"); the same word again stays as typed (D32)
     if (vLanguage == 0 && _autoFixUndo.keyCount > 0) {
@@ -424,8 +482,10 @@ static void AutoSwitchTo(int language, const char* rule) {
     if (vLanguage == language) return;
     TLAuto(rule, language); vLanguage = language; VKLanguageChanged(true); startNewSession(); vAutoSwitchForget();
 }
+
 static void ApplyAutoSwitchToEnglish(int correctedCount, bool atWordBreak) {
     vAutoSwitchRequest = -1;
+    _macroKeys.clear();   // the word on screen is no longer the keys typed
     if (atWordBreak) RememberAutoFix(correctedCount); else _autoFixUndo.active = false;
     AutoSwitchTo(0, atWordBreak ? "vi_word_to_en" : "double_key");
     ResetEnglishWord(atWordBreak && IsWhitespaceKey(_keycode));   // mid-word: the rest of this word is not a whole word
@@ -563,6 +623,16 @@ static LRESULT CALLBACK keyboardHook(int nCode, WPARAM wParam, LPARAM lParam) {
     // right after a focus change, until the field has been checked)
     if (site::focusedIsPassword()) { resetTyping(); return CallNextHookEx(_kbHook, nCode, wParam, lParam); }
 
+    // Gõ tắt: remember the keys of this word, and at a break key replace the trigger with its expansion
+    // before the engine (or the auto switch) sees the key.
+    if (!(vOtherLanguage && _otherInputLanguage)) {
+        MacroKeyDown(_keycode, _flag);
+        if (IsMacroBreakKey(_keycode) && !OTHER_CONTROL_KEY) {
+            if (ExpandMacro()) return 1;
+            _macroKeys.clear();
+        }
+    }
+
     // Backspace right after an automatic correction undoes it
     if (_keycode == KEY_DELETE && _autoFixUndo.active && !(OTHER_CONTROL_KEY)) { if (UndoAutoFixWithBackspace()) return 1; }
     _autoFixUndo.active = false;
@@ -595,6 +665,7 @@ static LRESULT CALLBACK mouseHook(int nCode, WPARAM wParam, LPARAM lParam) {
             if (!PtInRect(&r, p)) PostMessageW(vEmojiWindow, WM_APP + 11, 0, 0);
         }
         _autoFixUndo.active = false; TLNoteClick();
+        _macroKeys.clear();
         if (vLanguage == 0) ResetEnglishWord(true);
         else vKeyHandleEvent(vKeyEvent::Mouse, vKeyEventState::MouseDown, 0);
     }

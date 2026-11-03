@@ -20,6 +20,7 @@ Type Telex as usual. When you type an English word in Vietnamese mode, or a Viet
 - **Remembers the language** for each app, and for each website in Chrome, Safari, Arc, Brave, Edge, Vivaldi and Opera.
 - **Switch hotkey:** a key with modifiers, or modifiers alone (⌃⇧), with an optional beep.
 - **Works with Dvorak and other layouts:** Vikey steps aside automatically for other input languages (Japanese, Chinese…).
+- **Gõ tắt (text macros, Windows):** type a short trigger and a space or punctuation mark to get the full phrase. The list lives in `%LOCALAPPDATA%\Vikey\macros.txt`, one `trigger=expansion` per line (`vn=Việt Nam`, `ko=không`), and is editable from Settings. Matching ignores case; an all-caps trigger makes the expansion all caps.
 
 ## Build
 

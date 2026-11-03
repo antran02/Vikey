@@ -9,6 +9,7 @@
 #include "Prefs.h"
 #include "KeyMap.h"
 #include "Emoji.h"
+#include "Macro.h"
 #include "resource.h"
 #include <commctrl.h>
 #include <windowsx.h>
@@ -303,7 +304,7 @@ static void startRecording(HWND c) { if (Recorder* r = rec(c)) { SetFocus(c); r-
 static void destroyChildren(HWND h) { std::vector<HWND> kids; for (HWND c = GetWindow(h, GW_CHILD); c; c = GetWindow(c, GW_HWNDNEXT)) kids.push_back(c); for (HWND c : kids) DestroyWindow(c); }
 
 // ---- main window -----------------------------------------------------------------------------
-enum { C_SEG = 200, C_HOTKEY, C_BEEP, C_AUTO, C_PAUSE, C_SMART, C_SITE, C_MARK, C_SPELL, C_RESTORE, C_LOGIN, C_UPDATE, C_LOGKEYS, C_EMOJI, C_EMOJIKEY, C_FEEDBACK, C_STYLE,
+enum { C_SEG = 200, C_HOTKEY, C_BEEP, C_AUTO, C_PAUSE, C_SMART, C_SITE, C_MARK, C_SPELL, C_RESTORE, C_LOGIN, C_UPDATE, C_LOGKEYS, C_EMOJI, C_EMOJIKEY, C_FEEDBACK, C_STYLE, C_MACRO, C_MACROEDIT,
        L_REFRESH = 300, L_OPEN, L_CLEAR, A_LINK = 400, O_BACK = 500, O_NEXT, O_REC, O_BEEP, O_EMOJI, O_EMOJIKEY, O_EDIT = 520 };
 static const UINT WM_REBUILD = WM_APP + 20;
 static HWND _win, _seg, _hint, _logWin, _logList, _logSummary, _logGrid, _aboutWin, _onbWin, _ackWin, _tooltip;
@@ -343,6 +344,7 @@ static void refreshEnabled() {
     EnableWindow(_ctl[C_PAUSE], toggleOn(_ctl[C_AUTO]));
     EnableWindow(_ctl[C_SITE], toggleOn(_ctl[C_SMART]));
     EnableWindow(_ctl[C_RESTORE], toggleOn(_ctl[C_SPELL]));
+    EnableWindow(_ctl[C_MACROEDIT], toggleOn(_ctl[C_MACRO]));
 }
 static void setHint() { if (_hint) SetWindowTextW(_hint, (L"Bấm " + hotkeyDisplay(currentHotkey()) + L" để chuyển").c_str()); }
 
@@ -379,6 +381,11 @@ static void buildMain() {
     toggleRow(L"Tạm dừng 5 giây", L"Khi bạn tự bấm chuyển Anh/Việt, Vikey không tự chuyển trong 5 giây, để giữ đúng lựa chọn của bạn.", C_PAUSE, prefs::getInt(L"PauseAutoAfterManual", 1) != 0);
     toggleRow(L"Nhớ theo ứng dụng", L"Vikey nhớ bạn dùng tiếng Anh hay tiếng Việt ở mỗi ứng dụng và tự chuyển lại khi bạn quay về ứng dụng đó.", C_SMART, prefs::getInt(L"UseSmartSwitchKey", 1) != 0);
     toggleRow(L"Nhớ theo trang web", L"Trong Chrome, Edge, Brave, Vivaldi, Opera, Firefox: nhớ tiếng Anh hay tiếng Việt cho từng trang web. Chỉ đọc địa chỉ tab đang mở, ngay trên máy bạn.", C_SITE, prefs::getInt(L"SmartSwitchPerSite", 1) != 0);
+    endGroup();
+    beginGroup(L"Gõ tắt");
+    toggleRow(L"Bật gõ tắt", L"Gõ một viết tắt rồi dấu cách (hoặc dấu câu) để thay bằng cụm từ đầy đủ. Viết tắt 1–31 chữ/số, không phân biệt hoa thường; gõ toàn chữ hoa thì cụm từ cũng ra chữ hoa.", C_MACRO, macro::enabled());
+    HWND macroEdit = row(L"Danh sách gõ tắt", L"Mở macros.txt (trong thư mục dữ liệu của Vikey) để thêm, sửa hoặc xoá các viết tắt: mỗi dòng viết tắt=thay thế. Vikey đọc lại file ngay khi bạn lưu.", L"VikeyButton", C_MACROEDIT, 120, 26, WS_TABSTOP);
+    SetWindowTextW(macroEdit, L"Sửa danh sách…"); setBg(macroEdit, GROUP);
     endGroup();
     beginGroup(L"Gõ tiếng Việt");
     HWND style = row(L"Kiểu gõ", L"Telex: [ ra ơ, ] ra ư, w ra ư. Telex đơn giản 1: [ ] là dấu ngoặc, w đứng riêng vẫn là w. Telex đơn giản 2: [ ] là dấu ngoặc, w vẫn ra ư. Cả ba kiểu đều gõ uw, ow, aw ra ư, ơ, ă.", L"COMBOBOX", C_STYLE, 150, 200, CBS_DROPDOWNLIST | WS_TABSTOP);
@@ -429,6 +436,8 @@ static LRESULT CALLBACK mainProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         case C_MARK: if (HIWORD(wp) == CBN_SELCHANGE) { prefs::setInt(L"ModernOrthography", SendMessageW(c, CB_GETCURSEL, 0, 0) == 0 ? 1 : 0); core::reloadSettings(); } break;
         case C_SPELL: flag(L"Spelling"); break;
         case C_RESTORE: flag(L"RestoreIfInvalidWord"); break;
+        case C_MACRO: flag(L"MacroEnabled"); break;
+        case C_MACROEDIT: { std::wstring path = macro::listPath(); ShellExecuteW(nullptr, L"open", path.c_str(), nullptr, nullptr, SW_SHOWNORMAL); break; }
         case C_EMOJI: prefs::setInt(L"EmojiPicker", toggleOn(c)); core::reloadSettings(); emoji::settingsChanged(); afterHotkeyChange(); break;
         case C_LOGIN: prefs::setLaunchAtLogin(toggleOn(c)); setToggle(c, prefs::launchAtLogin()); break;
         case C_UPDATE: prefs::setInt(L"AutoUpdate", toggleOn(c)); break;
