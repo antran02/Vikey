@@ -373,12 +373,24 @@ static bool ExpandMacro() {
         for (wchar_t c : _macroKeys) { if (c >= L'0' && c <= L'9') shown++; else break; }
     }
     batchBackspaces(shown);
+    flushBatch();   // delete the trigger first: the expansion then lands in an empty spot
+    // One character per SendInput, a few milliseconds apart: Notepad (WinUI) folds a rapid
+    // burst of synthetic characters into repeats of the last one ("phải không" -> "phải ggggg").
     for (wchar_t c : expansion) {
         if (c == L'\n') batchKey(VK_RETURN);
         else if (c == L'\t') batchKey(VK_TAB);
         else batchText(&c, 1);
+        flushBatch();
+        Sleep(3);
     }
-    if (_keyVk) batchKey((WORD)_keyVk, _keyExtended);   // modifiers are still held: Shift+; still types ':'
+    // The break key as the character it types (":" after Shift+;): a virtual-key press right
+    // after the text made Notepad commit the word with the last character again.
+    wchar_t endChar = (wchar_t)keyCodeToCharacter(_keycode | ((_flag & F_SHIFT) ? CAPS_MASK : 0));
+    if (endChar && _keycode != KEY_RETURN && _keycode != KEY_ENTER && _keycode != KEY_TAB) {
+        batchText(&endChar, 1);
+    } else if (_keyVk) {
+        batchKey((WORD)_keyVk, _keyExtended);
+    }
     flushBatch();
 
     vAutoSwitchRequest = -1;
