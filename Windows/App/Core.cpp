@@ -340,7 +340,8 @@ static void SendEngineOutput() {
 
 // ---- Gõ tắt / macros (Macro.cpp) -----------------------------------------------------------
 /// Keys that finish a word: the macro expands before the key itself is typed.
-static bool IsMacroBreakKey(Uint16 key) {
+static bool IsMacroBreakKey(Uint16 key, bool shift) {
+    if (shift && IS_NUMBER_KEY(key)) return true;   // ! @ # $ % ^ & * ( ) end a word like any punctuation
     return key == KEY_SPACE || key == KEY_RETURN || key == KEY_ENTER || key == KEY_TAB ||
            key == KEY_COMMA || key == KEY_DOT || key == KEY_SEMICOLON || key == KEY_SLASH ||
            key == KEY_BACK_SLASH || key == KEY_MINUS || key == KEY_EQUALS || key == KEY_QUOTE ||
@@ -349,7 +350,7 @@ static bool IsMacroBreakKey(Uint16 key) {
 static void MacroKeyDown(Uint16 key, unsigned flags) {
     if (flags & (F_CONTROL | F_ALT | F_WIN)) { _macroKeys.clear(); return; }
     if (key == KEY_DELETE) { if (!_macroKeys.empty()) _macroKeys.pop_back(); return; }
-    if (IsMacroBreakKey(key)) return;
+    if (IsMacroBreakKey(key, (flags & F_SHIFT) != 0)) return;
     if (key == KEY_LEFT || key == KEY_RIGHT || key == KEY_UP || key == KEY_DOWN || key == KEY_ESC) { _macroKeys.clear(); return; }
     bool upper = (flags & F_SHIFT) || ((flags & F_CAPS) && IsLetterKey(key));   // Caps Lock shifts letters only ("1" stays "1")
     wchar_t ch = (wchar_t)keyCodeToCharacter(key | (upper ? CAPS_MASK : 0));
@@ -630,7 +631,7 @@ static LRESULT CALLBACK keyboardHook(int nCode, WPARAM wParam, LPARAM lParam) {
     // before the engine (or the auto switch) sees the key.
     if (!(vOtherLanguage && _otherInputLanguage)) {
         MacroKeyDown(_keycode, _flag);
-        if (IsMacroBreakKey(_keycode) && !OTHER_CONTROL_KEY) {
+        if (IsMacroBreakKey(_keycode, (_flag & F_SHIFT) != 0) && !OTHER_CONTROL_KEY) {
             if (ExpandMacro()) return 1;
             _macroKeys.clear();
         }
