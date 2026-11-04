@@ -384,7 +384,7 @@ static void buildMain() {
     endGroup();
     beginGroup(L"Gõ tiếng Việt");
     // Gõ tắt: one row keeps the window short enough for a 768 px screen
-    rowLabel(L"Gõ tắt", L"Gõ một viết tắt rồi dấu cách (hoặc dấu câu) để thay bằng cụm từ đầy đủ. Viết tắt 1–31 chữ/số, không phân biệt hoa thường; gõ toàn chữ hoa thì cụm từ cũng ra chữ hoa. Danh sách: macros.txt, mỗi dòng viết tắt=thay thế.");
+    rowLabel(L"Gõ tắt", L"Gõ một viết tắt rồi dấu cách (hoặc dấu câu) để thay bằng cụm từ đầy đủ. Chỉ áp dụng khi đang ở chế độ tiếng Việt. Viết tắt 1–31 chữ/số, không phân biệt hoa thường; gõ toàn chữ hoa thì cụm từ cũng ra chữ hoa. Danh sách: macros.txt, mỗi dòng viết tắt=thay thế.");
     HWND macroBtn = child(L"VikeyButton", L"Sửa danh sách…", WS_TABSTOP, W - MARGIN - 16 - 40 - 8 - 116, _y + (ROW - 26) / 2, 116, 26, C_MACROEDIT, fBody);
     setBg(macroBtn, GROUP);
     HWND macroTgl = child(L"VikeyToggle", L"", 0, W - MARGIN - 16 - 40, _y + (ROW - 23) / 2, 40, 23, C_MACRO, fBody);

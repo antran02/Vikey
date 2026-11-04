@@ -359,7 +359,7 @@ static void MacroKeyDown(Uint16 key, unsigned flags) {
 }
 /// Replaces the trigger just typed with its expansion, then types the break key that ended the word.
 static bool ExpandMacro() {
-    if (!macro::enabled() || _macroKeys.empty()) return false;
+    if (!macro::enabled() || vLanguage != 1 || _macroKeys.empty()) return false;   // only while typing Vietnamese: an English word stays as typed
     std::wstring expansion;
     if (!macro::find(macro::entries(), _macroKeys, expansion)) return false;
 
