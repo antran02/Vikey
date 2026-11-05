@@ -57,14 +57,55 @@ jobs:
     runs-on: windows-latest
     permissions:
       contents: write
+      actions: read
     env:
       CERTUM_EMAIL: ${{ secrets.CERTUM_EMAIL }}
       CERTUM_OTP: ${{ secrets.CERTUM_OTP }}
+      SIGNPATH_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
+      - name: Stage unsigned binaries for SignPath
+        if: env.SIGNPATH_TOKEN != ''
+        run: |
+          New-Item -ItemType Directory -Force signpath-input | Out-Null
+          foreach ($arch in @('x64', 'arm64')) {
+            New-Item -ItemType Directory -Force "signpath-input/$arch" | Out-Null
+            Copy-Item "artifacts/Vikey-windows-$arch/Vikey.exe" "signpath-input/$arch/Vikey.exe"
+          }
+        shell: pwsh
+      - name: Upload artifact for SignPath
+        id: signpath-upload
+        if: env.SIGNPATH_TOKEN != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: signpath-input
+          path: signpath-input
+          retention-days: 1
+      - name: Sign binaries (SignPath Foundation)
+        id: signpath
+        if: env.SIGNPATH_TOKEN != ''
+        uses: signpath/github-action-submit-signing-request@v3
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
+          artifact-configuration-slug: ${{ vars.SIGNPATH_ARTIFACT_CONFIGURATION_SLUG }}
+          github-artifact-id: ${{ steps.signpath-upload.outputs.artifact-id }}
+          wait-for-completion: true
+          output-artifact-directory: signed
+      - name: Install signed binaries
+        if: steps.signpath.conclusion == 'success'
+        run: |
+          "SIGNPATH_SIGNED=1" >> $env:GITHUB_ENV
+          foreach ($arch in @('x64', 'arm64')) {
+            Copy-Item "signed/$arch/Vikey.exe" "artifacts/Vikey-windows-$arch/Vikey.exe" -Force
+            Get-AuthenticodeSignature "artifacts/Vikey-windows-$arch/Vikey.exe" | Format-List Status, SignerCertificate
+          }
+        shell: pwsh
       - name: "Code signing tool (ssign - Certum SimplySign cloud cert, headless)"
         if: env.CERTUM_OTP != ''
         run: |
@@ -79,6 +120,7 @@ jobs:
           "$ver" | Out-Host
           New-Item -ItemType Directory -Force dist | Out-Null
           function Sign($file) {
+            if ($env:SIGNPATH_SIGNED) { "already signed by SignPath: $file" | Out-Host; return }
             if (-not $env:SSIGN) { "unsigned: $file (no CERTUM_OTP secret)" | Out-Host; return }
             & $env:SSIGN $file
             if ($LASTEXITCODE -ne 0) { throw "signing failed: $file" }
